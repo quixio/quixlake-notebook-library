@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quixviz"
+version = "0.1.0"
+description = "Zoom-aware timeseries visualisation for the Quix data lake in marimo, Jupyter, and Colab."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Quix", email = "info@quix.io"}]
+keywords = ["timeseries", "visualisation", "duckdb", "iceberg", "quix", "marimo", "jupyter", "colab"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
+
+dependencies = [
+    "requests>=2.25",
+    "pandas>=1.5",
+    "plotly>=5.18",
+]
+
+[project.optional-dependencies]
+jupyter = ["ipywidgets>=8", "anywidget>=0.9"]
+marimo = ["marimo>=0.9"]
+local = ["duckdb>=0.10", "pyarrow>=14"]
+dev = ["pytest>=7", "pytest-cov>=4", "duckdb>=0.10", "pyarrow>=14"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

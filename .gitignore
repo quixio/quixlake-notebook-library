@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Virtual envs
+.venv/
+venv/
+env/
+ENV/
+
+# Test / cache
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Notebook artefacts
+.ipynb_checkpoints/
+__marimo__/
+
+# Generated demo data — run examples/generate_demo_data.py
+examples/demo_telemetry.parquet
+*.parquet
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Environment files (never commit secrets)
+.env
+.env.*
+!.env.example
