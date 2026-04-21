@@ -51,7 +51,11 @@ def _normalize_trace_datetimes(fig) -> None:
         sample = x[0]
         if isinstance(sample, _dt.datetime):
             continue
-        as_dt = pd.to_datetime(x, format="ISO8601", utc=True)
+        # Strip tz: marimo parses browser-sent ISO bounds as naive datetimes,
+        # so the trace data must also be naive for the comparison to work.
+        # DuckDB's time_bucket returns naive timestamps in UTC, so this
+        # matches the axis range strings the renderer already produces.
+        as_dt = pd.to_datetime(x, format="ISO8601", utc=True).tz_localize(None)
         trace.x = [ts.to_pydatetime() for ts in as_dt]
 
 
