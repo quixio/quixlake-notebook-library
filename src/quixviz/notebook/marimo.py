@@ -26,10 +26,33 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Callable
 
+import numpy as np
 import pandas as pd
 
 if TYPE_CHECKING:
     from quixviz.chart import TimeseriesChart
+
+
+def _datetimes_to_epoch_ms(fig) -> None:
+    """Convert datetime x-data in all traces to numeric epoch ms.
+
+    Marimo's ``mo.ui.plotly`` uses numpy to compare selection bounds
+    (floats) with trace x-data. When the x-axis is a date axis the
+    trace data contains datetime strings, which numpy can't compare
+    with floats. Converting to epoch ms keeps the data numeric so the
+    comparison works, and plotly still renders dates when the axis
+    ``type`` is ``"date"``.
+    """
+    for trace in fig.data:
+        x = trace.x
+        if x is None or len(x) == 0:
+            continue
+        sample = x.iloc[0] if hasattr(x, "iloc") else x[0]
+        if isinstance(sample, (int, float, np.integer, np.floating)):
+            continue
+        # Convert datetime-like x values to epoch ms (plotly date axis convention)
+        as_dt = pd.to_datetime(x)
+        trace.x = (as_dt.astype("int64") // 10**6).tolist()
 
 
 def marimo_chart(chart: "TimeseriesChart"):
@@ -47,6 +70,8 @@ def marimo_chart(chart: "TimeseriesChart"):
         ) from e
 
     fig = chart.figure()
+    _datetimes_to_epoch_ms(fig)
+    fig.update_xaxes(type="date")
     fig.update_layout(dragmode="select", selectdirection="h")
     return mo.ui.plotly(fig)
 
