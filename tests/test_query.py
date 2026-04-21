@@ -112,3 +112,65 @@ def test_expected_columns_matches_aliases():
 
 def test_agg_alias_is_stable():
     assert agg_alias("temperature", "avg") == "temperature__avg"
+
+
+# ── Custom SQL (CTE) path ───────────────────────────────────────────
+
+
+def test_preflight_sql_wraps_custom_query_in_cte():
+    spec = Series(sql="SELECT ts, v FROM raw WHERE region = 'EU'", x="ts", y=["v"])
+    sql = build_preflight_sql(spec)
+    assert sql.startswith("WITH _base AS (")
+    assert "SELECT ts, v FROM raw WHERE region = 'EU'" in sql
+    assert "FROM _base" in sql
+    assert "MIN(\"ts\")" in sql
+
+
+def test_bucket_sql_wraps_custom_query_in_cte():
+    spec = Series(sql="SELECT ts, v FROM raw", x="ts", y=["v"], agg=["avg"])
+    sql = build_bucket_sql(spec, bucket_ms=60_000, x_min=None, x_max=None)
+    assert sql.startswith("WITH _base AS (")
+    assert "FROM _base" in sql
+    assert "time_bucket(INTERVAL '1 minutes', \"ts\")" in sql
+    assert "AVG(\"v\") AS \"v__avg\"" in sql
+
+
+def test_custom_sql_with_where_and_bounds():
+    spec = Series(
+        sql="SELECT ts, v FROM raw",
+        x="ts",
+        y=["v"],
+        where="v > 0",
+    )
+    sql = build_bucket_sql(
+        spec, 1000,
+        x_min=datetime(2024, 1, 1),
+        x_max=datetime(2024, 1, 2),
+    )
+    assert "(v > 0)" in sql
+    assert "\"ts\" >= TIMESTAMP '2024-01-01" in sql
+    assert "\"ts\" <= TIMESTAMP '2024-01-02" in sql
+
+
+def test_custom_sql_with_group_by():
+    spec = Series(
+        sql="SELECT ts, v, device FROM raw",
+        x="ts",
+        y=["v"],
+        agg=["min", "max"],
+        group_by="device",
+    )
+    sql = build_bucket_sql(spec, 1000, None, None)
+    assert "WITH _base AS (" in sql
+    assert "\"device\"" in sql
+    assert "GROUP BY 1, 2" in sql
+
+
+def test_table_and_sql_mutually_exclusive():
+    with pytest.raises(ValueError, match="not both"):
+        Series(table="t", sql="SELECT 1", x="ts", y=["v"])
+
+
+def test_neither_table_nor_sql_raises():
+    with pytest.raises(ValueError, match="must be provided"):
+        Series(x="ts", y=["v"])

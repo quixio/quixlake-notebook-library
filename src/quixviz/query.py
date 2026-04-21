@@ -110,16 +110,30 @@ def _render_x_bound(
     return _quote_literal(value)
 
 
+def _source_fragment(spec: Series) -> tuple[str, str]:
+    """Return ``(cte_prefix, from_ref)`` for the query source.
+
+    When ``spec.sql`` is set the user's query becomes a CTE named ``_base``
+    and subsequent clauses reference ``_base``.  Otherwise we use the bare
+    table name directly (required for Quix lake partition pruning).
+    """
+    if spec.sql:
+        cte = f"WITH _base AS (\n{spec.sql}\n) "
+        return cte, "_base"
+    assert spec.table is not None
+    return "", quote_table(spec.table)
+
+
 def build_preflight_sql(spec: Series) -> str:
     """One round-trip: MIN, MAX, COUNT of the x column.
 
     Iceberg per-file stats make this O(files) rather than O(rows).
     """
     xq = quote_ident(spec.x)
-    tbl = quote_table(spec.table)
+    cte, tbl = _source_fragment(spec)
     where = _where_clause(spec, _bound(spec.time_range, "start"), _bound(spec.time_range, "end"))
     return (
-        f"SELECT MIN({xq}) AS x_min, MAX({xq}) AS x_max, COUNT(*) AS row_count "
+        f"{cte}SELECT MIN({xq}) AS x_min, MAX({xq}) AS x_max, COUNT(*) AS row_count "
         f"FROM {tbl}{where}"
     )
 
@@ -132,7 +146,7 @@ def build_bucket_sql(
 ) -> str:
     """Bucketed aggregation query for the visible window."""
     xq = quote_ident(spec.x)
-    tbl = quote_table(spec.table)
+    cte, tbl = _source_fragment(spec)
     bucket = _bucket_expr(spec.x, spec.x_unit, bucket_ms)
 
     select_parts: list[str] = [f"{bucket} AS {quote_ident(spec.x)}"]
@@ -152,7 +166,8 @@ def build_bucket_sql(
 
     where = _where_clause(spec, x_min, x_max)
     return (
-        "SELECT "
+        cte
+        + "SELECT "
         + ", ".join(select_parts)
         + f" FROM {tbl}{where} "
         + "GROUP BY " + ", ".join(group_parts)

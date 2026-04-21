@@ -189,7 +189,8 @@ class TimeseriesChart:
 def timeseries(
     client: Transport | QuixClient,
     *,
-    table: str,
+    table: str | None = None,
+    sql: str | None = None,
     x: str,
     y: str | Sequence[str],
     agg: AggFn | Sequence[AggFn] = ("avg",),
@@ -202,11 +203,34 @@ def timeseries(
     rangeslider: bool = True,
     rangeselector: bool = True,
 ) -> TimeseriesChart:
-    """Build a zoom-aware timeseries chart."""
+    """Build a zoom-aware timeseries chart.
+
+    Provide either ``table`` (a bare table name) **or** ``sql`` (a custom
+    SELECT query).  When ``sql`` is used, the library wraps it in a CTE and
+    applies timestamp filtering + bucketing on top, so the query only needs
+    to expose the columns referenced by ``x``, ``y``, and ``group_by``.
+
+    Example with custom SQL::
+
+        chart = qv.timeseries(
+            client,
+            sql=\"\"\"
+                SELECT t.ts, t.temperature, d.region
+                FROM telemetry t
+                JOIN devices d USING (device_id)
+                WHERE d.region = 'EU'
+            \"\"\",
+            x="ts",
+            y="temperature",
+            agg=["min", "max", "avg"],
+            group_by="region",
+        )
+    """
     if isinstance(time_range, tuple):
         time_range = TimeRange(*time_range)
     spec = Series(
         table=table,
+        sql=sql,
         x=x,
         y=[y] if isinstance(y, str) else list(y),
         agg=[agg] if isinstance(agg, str) else list(agg),

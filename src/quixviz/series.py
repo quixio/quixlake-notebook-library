@@ -26,17 +26,22 @@ class TimeRange:
 
 @dataclass
 class Series:
-    """A single chart spec. One Series -> one SQL query at a given LOD."""
+    """A single chart spec. One Series -> one SQL query at a given LOD.
 
-    table: str
-    x: str
-    y: Sequence[str]
+    Provide either ``table`` (a bare table name) **or** ``sql`` (an arbitrary
+    SELECT that the library wraps in a CTE).  They are mutually exclusive.
+    """
+
+    table: str | None = None
+    x: str = ""
+    y: Sequence[str] = ()
     agg: Sequence[AggFn] = ("avg",)
     group_by: str | None = None
     where: str | None = None
     x_unit: XUnit = "timestamp"
     time_range: TimeRange | None = None
     max_group_values: int = 20
+    sql: str | None = None
 
     def __post_init__(self) -> None:
         if isinstance(self.y, str):
@@ -47,3 +52,7 @@ class Series:
             raise ValueError("Series.y must contain at least one column")
         if not self.agg:
             raise ValueError("Series.agg must contain at least one aggregation")
+        if self.table and self.sql:
+            raise ValueError("Provide either 'table' or 'sql', not both.")
+        if not self.table and not self.sql:
+            raise ValueError("Either 'table' or 'sql' must be provided.")
