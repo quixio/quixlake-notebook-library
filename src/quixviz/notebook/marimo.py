@@ -50,9 +50,10 @@ def _datetimes_to_epoch_ms(fig) -> None:
         sample = x.iloc[0] if hasattr(x, "iloc") else x[0]
         if isinstance(sample, (int, float, np.integer, np.floating)):
             continue
-        # Convert datetime-like x values to epoch ms (plotly date axis convention)
-        as_dt = pd.to_datetime(x)
-        trace.x = (as_dt.astype("int64") // 10**6).tolist()
+        # Convert datetime-like x values to epoch ms (plotly date axis convention).
+        # Use .timestamp() to avoid pandas resolution differences (ns vs us).
+        as_dt = pd.to_datetime(x, format="ISO8601")
+        trace.x = [int(ts.timestamp() * 1000) for ts in as_dt]
 
 
 def marimo_chart(chart: "TimeseriesChart"):
