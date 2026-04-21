@@ -27,7 +27,7 @@ import pandas as pd
 
 from quixviz.cache import TileCache, TileKey, hash_sql
 from quixviz.client import QuixClient, Transport
-from quixviz.lod import DEFAULT_CSS_WIDTH_PX, compute_bucket_ms
+from quixviz.lod import DEFAULT_CSS_WIDTH_PX, compute_bucket_ms, ms_to_interval
 from quixviz.query import build_bucket_sql, build_preflight_sql
 from quixviz.renderer.plotly import PlotlyRenderer
 from quixviz.series import AggFn, Series, TimeRange, XUnit
@@ -39,13 +39,16 @@ class TimeseriesChart:
     spec: Series
     css_width_px: int = DEFAULT_CSS_WIDTH_PX
     dpr: float = 1.0
-    rangeslider: bool = True
-    rangeselector: bool = True
+    rangeslider: bool = False
+    rangeselector: bool = False
+
+    show_stats: bool = True
 
     _cache: TileCache = field(default_factory=TileCache, init=False, repr=False)
     _renderer: PlotlyRenderer = field(init=False, repr=False)
     _x_min: float | None = field(default=None, init=False, repr=False)
     _x_max: float | None = field(default=None, init=False, repr=False)
+    _row_count: int | None = field(default=None, init=False, repr=False)
     _last_bucket_ms: int | None = field(default=None, init=False, repr=False)
     _df: pd.DataFrame = field(default_factory=pd.DataFrame, init=False, repr=False)
 
@@ -58,8 +61,10 @@ class TimeseriesChart:
 
     def preflight(self) -> tuple[float, float, int]:
         """Fetch MIN/MAX/COUNT so we know the initial zoom range."""
+        print("quixviz: preflight ...", end="", flush=True)
         sql = build_preflight_sql(self.spec)
         df = self.transport.query(sql)
+        print(" done.")
         if df.empty:
             raise RuntimeError("Preflight returned no rows — table may be empty.")
         row = df.iloc[0]
@@ -67,6 +72,7 @@ class TimeseriesChart:
         x_max = _to_ms(row["x_max"], self.spec.x_unit)
         count = int(row["row_count"])
         self._x_min, self._x_max = x_min, x_max
+        self._row_count = count
         return x_min, x_max, count
 
     def fetch(
@@ -94,17 +100,54 @@ class TimeseriesChart:
             self._last_bucket_ms = bucket_int
             return cached
 
+        print(f"quixviz: fetching (bucket={ms_to_interval(bucket_ms)}) ...", end="", flush=True)
         df = self.transport.query(sql)
+        print(f" {len(df)} rows.")
         self._cache.put(key, df)
         self._df = df
         self._last_bucket_ms = bucket_int
         self._x_min, self._x_max = x_min, x_max
         return df
 
+    def stats(self) -> dict:
+        """Return a summary of the current view's LOD parameters."""
+        physical_px = int(self.css_width_px * self.dpr)
+        span_ms = (self._x_max - self._x_min) if self._x_min is not None and self._x_max is not None else None
+        bucket_ms = self._last_bucket_ms
+        ms_per_px = span_ms / physical_px if span_ms is not None else None
+        rows_returned = len(self._df) if not self._df.empty else 0
+        full_res = rows_returned == self._row_count if self._row_count is not None else None
+        return {
+            "width_px": physical_px,
+            "span_ms": span_ms,
+            "ms_per_px": ms_per_px,
+            "bucket_ms": bucket_ms,
+            "bucket_label": ms_to_interval(bucket_ms) if bucket_ms else None,
+            "rows_returned": rows_returned,
+            "total_rows": self._row_count,
+            "full_resolution": full_res,
+        }
+
+    def _stats_text(self) -> str:
+        s = self.stats()
+        parts = [
+            f"width: {s['width_px']}px",
+            f"1px = {_fmt_duration(s['ms_per_px'])}" if s["ms_per_px"] else None,
+            f"bucket: {s['bucket_label']}" if s["bucket_label"] else None,
+            f"rows: {s['rows_returned']}/{s['total_rows']}" if s["total_rows"] is not None else f"rows: {s['rows_returned']}",
+            "full resolution" if s["full_resolution"] else None,
+        ]
+        return " | ".join(p for p in parts if p)
+
     def figure(self):
         if self._df.empty:
             self.fetch()
-        return self._renderer.update(self._df, x_range=self._axis_range())
+        fig = self._renderer.update(self._df, x_range=self._axis_range())
+        if self.show_stats:
+            fig.update_layout(
+                title=dict(text=self._stats_text(), font=dict(size=11, color="gray")),
+            )
+        return fig
 
     def show(self):
         return self.figure()
@@ -200,8 +243,9 @@ def timeseries(
     time_range: TimeRange | tuple | None = None,
     css_width_px: int = DEFAULT_CSS_WIDTH_PX,
     dpr: float = 1.0,
-    rangeslider: bool = True,
-    rangeselector: bool = True,
+    rangeslider: bool = False,
+    rangeselector: bool = False,
+    show_stats: bool = True,
 ) -> TimeseriesChart:
     """Build a zoom-aware timeseries chart.
 
@@ -246,6 +290,7 @@ def timeseries(
         dpr=dpr,
         rangeslider=rangeslider,
         rangeselector=rangeselector,
+        show_stats=show_stats,
     )
 
 
@@ -359,6 +404,22 @@ _DURATION_SCALE_MS = {
     "d": 86_400_000,
     "w": 7 * 86_400_000,
 }
+
+
+def _fmt_duration(ms: float) -> str:
+    """Human-readable duration from milliseconds."""
+    if ms < 1:
+        return f"{ms * 1000:.0f}us"
+    if ms < 1000:
+        return f"{ms:.1f}ms" if ms != int(ms) else f"{int(ms)}ms"
+    s = ms / 1000
+    if s < 60:
+        return f"{s:.2f}s" if s != int(s) else f"{int(s)}s"
+    m = s / 60
+    if m < 60:
+        return f"{m:.1f}min"
+    h = m / 60
+    return f"{h:.1f}h"
 
 
 def _duration_to_ms(duration: str | timedelta) -> float:

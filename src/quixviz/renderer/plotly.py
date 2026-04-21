@@ -39,8 +39,8 @@ class PlotlyRenderer:
     spec: Series
     height: int = 420
     marker_threshold: int = 500
-    rangeslider: bool = True
-    rangeselector: bool = True
+    rangeslider: bool = False
+    rangeselector: bool = False
     _fig: "go.Figure | None" = field(default=None, init=False, repr=False)
 
     def figure(self) -> "go.Figure":
