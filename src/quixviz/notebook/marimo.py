@@ -24,36 +24,35 @@ Usage in a marimo notebook (three cells):
 
 from __future__ import annotations
 
+import datetime as _dt
 from typing import TYPE_CHECKING, Any, Callable
 
-import numpy as np
 import pandas as pd
 
 if TYPE_CHECKING:
     from quixviz.chart import TimeseriesChart
 
 
-def _datetimes_to_epoch_ms(fig) -> None:
-    """Convert datetime x-data in all traces to numeric epoch ms.
+def _normalize_trace_datetimes(fig) -> None:
+    """Coerce datetime x-data in all traces to Python ``datetime`` objects.
 
-    Marimo's ``mo.ui.plotly`` uses numpy to compare selection bounds
-    (floats) with trace x-data. When the x-axis is a date axis the
-    trace data contains datetime strings, which numpy can't compare
-    with floats. Converting to epoch ms keeps the data numeric so the
-    comparison works, and plotly still renders dates when the axis
-    ``type`` is ``"date"``.
+    ``mo.ui.plotly`` sends selection bounds from the browser as ISO
+    strings.  Marimo parses them to ``datetime.datetime`` and then does
+    ``x_arr >= parsed_bound``.  That comparison requires the trace data
+    to be datetime-compatible — ISO strings and raw ints both crash it.
+
+    Storing Python datetime objects keeps both sides of the comparison
+    compatible **and** lets plotly render a proper date axis.
     """
     for trace in fig.data:
         x = trace.x
         if x is None or len(x) == 0:
             continue
         sample = x[0]
-        if isinstance(sample, (int, float, np.integer, np.floating)):
+        if isinstance(sample, _dt.datetime):
             continue
-        # Convert datetime-like x values to epoch ms (plotly date axis convention).
-        # Use .timestamp() to avoid pandas resolution differences (ns vs us).
-        as_dt = pd.to_datetime(x, format="ISO8601")
-        trace.x = [int(ts.timestamp() * 1000) for ts in as_dt]
+        as_dt = pd.to_datetime(x, format="ISO8601", utc=True)
+        trace.x = [ts.to_pydatetime() for ts in as_dt]
 
 
 def marimo_chart(chart: "TimeseriesChart"):
@@ -71,16 +70,7 @@ def marimo_chart(chart: "TimeseriesChart"):
         ) from e
 
     fig = chart.figure()
-    _datetimes_to_epoch_ms(fig)
-    # Also convert the axis range to epoch ms so it matches the trace data.
-    xaxis = fig.layout.xaxis
-    if xaxis.range is not None:
-        xaxis.range = [
-            int(pd.to_datetime(v, format="ISO8601").timestamp() * 1000)
-            if isinstance(v, str) else v
-            for v in xaxis.range
-        ]
-    fig.update_xaxes(type="date")
+    _normalize_trace_datetimes(fig)
     fig.update_layout(dragmode="select", selectdirection="h")
     return mo.ui.plotly(fig)
 
