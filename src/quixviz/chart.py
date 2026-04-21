@@ -59,7 +59,7 @@ class TimeseriesChart:
     def preflight(self) -> tuple[float, float, int]:
         """Fetch MIN/MAX/COUNT so we know the initial zoom range."""
         sql = build_preflight_sql(self.spec)
-        df = self.transport.execute(sql)
+        df = self.transport.query(sql)
         if df.empty:
             raise RuntimeError("Preflight returned no rows — table may be empty.")
         row = df.iloc[0]
@@ -94,7 +94,7 @@ class TimeseriesChart:
             self._last_bucket_ms = bucket_int
             return cached
 
-        df = self.transport.execute(sql)
+        df = self.transport.query(sql)
         self._cache.put(key, df)
         self._df = df
         self._last_bucket_ms = bucket_int

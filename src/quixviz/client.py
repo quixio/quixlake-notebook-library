@@ -2,7 +2,7 @@
 
 Mirrors the contract used by the Svelte UI and the quixlake SDK:
 POST raw SQL as text/plain, receive CSV. We can swap this for Arrow
-Flight later by implementing the same `execute` method.
+Flight later by implementing the same `query` method.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ import requests
 class Transport(Protocol):
     """Any transport that turns a SQL string into a DataFrame."""
 
-    def execute(self, sql: str) -> pd.DataFrame: ...
+    def query(self, sql: str) -> pd.DataFrame: ...
 
 
 @dataclass
@@ -37,7 +37,7 @@ class QuixClient:
         if self.token:
             self._session.headers["Authorization"] = f"Bearer {self.token}"
 
-    def execute(self, sql: str) -> pd.DataFrame:
+    def query(self, sql: str) -> pd.DataFrame:
         url = urljoin(self.base_url + "/", "query")
         params = {
             "explain": "false",

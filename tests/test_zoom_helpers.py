@@ -16,7 +16,7 @@ class FakeTransport:
     def __init__(self) -> None:
         self.queries: list[str] = []
 
-    def execute(self, sql: str) -> pd.DataFrame:
+    def query(self, sql: str) -> pd.DataFrame:
         self.queries.append(sql)
         if "MIN(" in sql and "MAX(" in sql and "COUNT(" in sql:
             # 1-day span in ms epoch

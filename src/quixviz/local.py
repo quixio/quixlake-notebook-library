@@ -49,7 +49,7 @@ class DuckDBTransport:
     def register_view(self, name: str, sql: str) -> None:
         self._con.execute(f"CREATE OR REPLACE VIEW {name} AS {sql}")
 
-    def execute(self, sql: str) -> pd.DataFrame:
+    def query(self, sql: str) -> pd.DataFrame:
         df = self._con.execute(sql).df()
         # DuckDB returns `time_bucket(to_timestamp(...))` as tz-aware UTC.
         # The HTTP/CSV transport returns naive strings, and the chart's
