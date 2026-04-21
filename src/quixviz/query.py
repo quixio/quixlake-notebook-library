@@ -110,18 +110,18 @@ def _render_x_bound(
     return _quote_literal(value)
 
 
-def _source_fragment(spec: Series) -> tuple[str, str]:
-    """Return ``(cte_prefix, from_ref)`` for the query source.
+def _source_fragment(spec: Series) -> str:
+    """Return a FROM-clause source expression.
 
-    When ``spec.sql`` is set the user's query becomes a CTE named ``_base``
-    and subsequent clauses reference ``_base``.  Otherwise we use the bare
-    table name directly (required for Quix lake partition pruning).
+    When ``spec.sql`` is set the user's query becomes an inline subquery.
+    The Quix lake API only accepts bare ``SELECT`` statements (no ``WITH``),
+    so a CTE is not an option — we use ``(SELECT ...) AS _base`` instead.
+    Otherwise we use the bare table name (required for partition pruning).
     """
     if spec.sql:
-        cte = f"WITH _base AS (\n{spec.sql}\n) "
-        return cte, "_base"
+        return f"({spec.sql.strip()}) AS _base"
     assert spec.table is not None
-    return "", quote_table(spec.table)
+    return quote_table(spec.table)
 
 
 def build_preflight_sql(spec: Series) -> str:
@@ -130,10 +130,10 @@ def build_preflight_sql(spec: Series) -> str:
     Iceberg per-file stats make this O(files) rather than O(rows).
     """
     xq = quote_ident(spec.x)
-    cte, tbl = _source_fragment(spec)
+    tbl = _source_fragment(spec)
     where = _where_clause(spec, _bound(spec.time_range, "start"), _bound(spec.time_range, "end"))
     return (
-        f"{cte}SELECT MIN({xq}) AS x_min, MAX({xq}) AS x_max, COUNT(*) AS row_count "
+        f"SELECT MIN({xq}) AS x_min, MAX({xq}) AS x_max, COUNT(*) AS row_count "
         f"FROM {tbl}{where}"
     )
 
@@ -146,7 +146,7 @@ def build_bucket_sql(
 ) -> str:
     """Bucketed aggregation query for the visible window."""
     xq = quote_ident(spec.x)
-    cte, tbl = _source_fragment(spec)
+    tbl = _source_fragment(spec)
     bucket = _bucket_expr(spec.x, spec.x_unit, bucket_ms)
 
     select_parts: list[str] = [f"{bucket} AS {quote_ident(spec.x)}"]
@@ -166,8 +166,7 @@ def build_bucket_sql(
 
     where = _where_clause(spec, x_min, x_max)
     return (
-        cte
-        + "SELECT "
+        "SELECT "
         + ", ".join(select_parts)
         + f" FROM {tbl}{where} "
         + "GROUP BY " + ", ".join(group_parts)

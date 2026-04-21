@@ -117,20 +117,21 @@ def test_agg_alias_is_stable():
 # ── Custom SQL (CTE) path ───────────────────────────────────────────
 
 
-def test_preflight_sql_wraps_custom_query_in_cte():
+def test_preflight_sql_wraps_custom_query_as_subquery():
     spec = Series(sql="SELECT ts, v FROM raw WHERE region = 'EU'", x="ts", y=["v"])
     sql = build_preflight_sql(spec)
-    assert sql.startswith("WITH _base AS (")
     assert "SELECT ts, v FROM raw WHERE region = 'EU'" in sql
-    assert "FROM _base" in sql
+    assert "AS _base" in sql
     assert "MIN(\"ts\")" in sql
+    # Must be a bare SELECT (no WITH) for Quix lake compatibility
+    assert not sql.strip().startswith("WITH")
 
 
-def test_bucket_sql_wraps_custom_query_in_cte():
+def test_bucket_sql_wraps_custom_query_as_subquery():
     spec = Series(sql="SELECT ts, v FROM raw", x="ts", y=["v"], agg=["avg"])
     sql = build_bucket_sql(spec, bucket_ms=60_000, x_min=None, x_max=None)
-    assert sql.startswith("WITH _base AS (")
-    assert "FROM _base" in sql
+    assert "AS _base" in sql
+    assert not sql.strip().startswith("WITH")
     assert "time_bucket(INTERVAL '1 minutes', \"ts\")" in sql
     assert "AVG(\"v\") AS \"v__avg\"" in sql
 
@@ -161,7 +162,7 @@ def test_custom_sql_with_group_by():
         group_by="device",
     )
     sql = build_bucket_sql(spec, 1000, None, None)
-    assert "WITH _base AS (" in sql
+    assert "AS _base" in sql
     assert "\"device\"" in sql
     assert "GROUP BY 1, 2" in sql
 
