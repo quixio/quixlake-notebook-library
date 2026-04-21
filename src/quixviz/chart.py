@@ -150,6 +150,19 @@ class TimeseriesChart:
         return fig
 
     def show(self):
+        """Return an interactive widget if running inside a notebook.
+
+        Auto-detects marimo and Jupyter and wires up zoom callbacks so
+        the chart refetches at the new LOD when you pan/zoom.  Falls back
+        to a plain Plotly figure otherwise.
+        """
+        env = _detect_notebook()
+        if env == "marimo":
+            from quixviz.notebook.marimo import marimo_chart
+            return marimo_chart(self)
+        if env == "jupyter":
+            from quixviz.notebook.jupyter import attach_jupyter
+            return attach_jupyter(self)
         return self.figure()
 
     def _axis_range(self) -> tuple | None:
@@ -404,6 +417,32 @@ _DURATION_SCALE_MS = {
     "d": 86_400_000,
     "w": 7 * 86_400_000,
 }
+
+
+def _detect_notebook() -> str | None:
+    """Detect the current notebook environment.
+
+    Returns "marimo", "jupyter", or None.
+    """
+    # marimo sets __marimo__ in builtins when a notebook is running.
+    import builtins
+    if getattr(builtins, "__marimo__", None) is not None:
+        return "marimo"
+    # Also check via the marimo runtime module (some versions).
+    try:
+        from marimo._runtime.context import get_context
+        ctx = get_context()
+        if ctx is not None:
+            return "marimo"
+    except Exception:
+        pass
+    try:
+        shell = get_ipython().__class__.__name__  # type: ignore[name-defined]
+        if shell in ("ZMQInteractiveShell", "Shell"):
+            return "jupyter"
+    except Exception:
+        pass
+    return None
 
 
 def _fmt_duration(ms: float) -> str:
