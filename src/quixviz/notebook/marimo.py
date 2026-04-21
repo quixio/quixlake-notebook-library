@@ -47,7 +47,7 @@ def _datetimes_to_epoch_ms(fig) -> None:
         x = trace.x
         if x is None or len(x) == 0:
             continue
-        sample = x.iloc[0] if hasattr(x, "iloc") else x[0]
+        sample = x[0]
         if isinstance(sample, (int, float, np.integer, np.floating)):
             continue
         # Convert datetime-like x values to epoch ms (plotly date axis convention).
@@ -72,6 +72,14 @@ def marimo_chart(chart: "TimeseriesChart"):
 
     fig = chart.figure()
     _datetimes_to_epoch_ms(fig)
+    # Also convert the axis range to epoch ms so it matches the trace data.
+    xaxis = fig.layout.xaxis
+    if xaxis.range is not None:
+        xaxis.range = [
+            int(pd.to_datetime(v, format="ISO8601").timestamp() * 1000)
+            if isinstance(v, str) else v
+            for v in xaxis.range
+        ]
     fig.update_xaxes(type="date")
     fig.update_layout(dragmode="select", selectdirection="h")
     return mo.ui.plotly(fig)
